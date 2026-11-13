@@ -1,4 +1,4 @@
-# Security architecture — Legal Anonymiser MVP 0.3
+# Security architecture — Anonymiseur juridique MVP 0.3
 
 Status: **prototype, no independent security or legal review.** Do not describe it as GDPR-compliant, certified, or suitable for confidential client files without that evidence.
 

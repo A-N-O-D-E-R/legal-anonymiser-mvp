@@ -3,7 +3,7 @@ import { createContext, useContext } from "react";
 export type Lang = "en" | "fr";
 
 const en = {
-  title: "Legal Anonymiser", subtitle: "Local pseudonymisation & redaction · FR / EN", version: "MVP 0.3",
+  title: "Anonymiseur juridique", subtitle: "Local pseudonymisation & redaction · FR / EN", version: "MVP 0.3",
   localBanner: "Local-only processing", localBannerText: "Analysis, replacement and encryption run in this task pane. Document content is never sent to a server or AI service.",
   experimental: "Heuristic detection can miss or mis-label information. Review every entity. Test only on synthetic documents until independently validated.",
   mode: "Processing mode", modePseudo: "Pseudonymise (reversible)", modeRedact: "Redact (irreversible)", modeRestore: "Restore",
@@ -53,7 +53,7 @@ const en = {
 export type Dict = typeof en;
 
 const fr: Dict = {
-  title: "Legal Anonymiser", subtitle: "Pseudonymisation et caviardage en local · FR / EN", version: "MVP 0.3",
+  title: "Anonymiseur juridique", subtitle: "Pseudonymisation et caviardage en local · FR / EN", version: "MVP 0.3",
   localBanner: "Traitement exclusivement local", localBannerText: "L'analyse, le remplacement et le chiffrement s'exécutent dans ce volet. Le contenu du document n'est jamais envoyé à un serveur ni à un service d'IA.",
   experimental: "La détection heuristique peut oublier ou mal classer des informations. Vérifiez chaque entité. N'utilisez que des documents fictifs tant qu'une validation indépendante n'a pas eu lieu.",
   mode: "Mode de traitement", modePseudo: "Pseudonymiser (réversible)", modeRedact: "Caviarder (irréversible)", modeRestore: "Restaurer",

@@ -55,4 +55,10 @@ describe("detection (heuristic, FR/EN)", () => {
   it("does not span tab/break separators", () => {
     expect(find("Jean\u0001Dupont", "PERSON")).toEqual([]);
   });
+  it("detects capitalised street types, ALL-CAPS names, Docteur title, bare postcode+city", () => {
+    expect(find("11 Avenue Mazarin, 91380 CHILLY MAZARIN", "ADDRESS")).toEqual(["11 Avenue Mazarin, 91380 CHILLY MAZARIN"]);
+    expect(find("91380 CHILLY MAZARIN", "ADDRESS")).toEqual(["91380 CHILLY MAZARIN"]);
+    expect(find("Docteur EMMANUELLE CHAMPION,", "PERSON")).toEqual(["EMMANUELLE CHAMPION"]);
+    expect(find("FRANCK MARULLAZ, Opticien", "PERSON")).toEqual(["FRANCK MARULLAZ"]);
+  });
 });

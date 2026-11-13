@@ -8,8 +8,8 @@ const isCap = (t: string) => /^\p{Lu}\p{Ll}/u.test(t) || /^(?:O|D|L)['’]\p{Lu}
 const isAllCaps = (t: string) => /^\p{Lu}{2,}(?:['’-]\p{Lu}+)*$/u.test(t);
 const isStop = (t: string) => STOPWORDS.has(fold(t));
 const PARTICLE = new Set(["de", "du", "des", "van", "von", "der", "den", "di", "da", "del", "le", "la", "el", "al", "ben", "bin", "d'", "d’"]);
-const isFirst = (t: string) => isCap(t) && t.split("-").every(p => FIRST_NAMES.has(fold(p)));
-const TITLES = /^(?:M|MM|Mme|Mmes|Mlle|Monsieur|Madame|Mademoiselle|Maître|Maitre|Me|Mr|Mrs|Ms|Miss|Mx|Dr|Pr|Prof|Professor|Sir|Dame|Judge|Justice|Hon)$/u;
+const isFirst = (t: string) => (isCap(t) || isAllCaps(t)) && t.split("-").every(p => FIRST_NAMES.has(fold(p)));
+const TITLES = /^(?:M|MM|Mme|Mmes|Mlle|Monsieur|Madame|Mademoiselle|Maître|Maitre|Me|Mr|Mrs|Ms|Miss|Mx|Dr|Dre|Docteur|Docteure|Pr|Prof|Professeur|Professeure|Professor|Sir|Dame|Judge|Justice|Hon)$/u;
 
 interface Tok { text: string; start: number; end: number }
 

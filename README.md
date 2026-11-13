@@ -1,4 +1,4 @@
-# Legal Anonymiser for Word — MVP 0.3
+# Anonymiseur juridique pour Word — MVP 0.3
 
 Local-only **pseudonymisation** (reversible) and **redaction** (irreversible) of Word documents, French and English.
 React + TypeScript Office.js task-pane add-in; JSZip + DOM for OOXML; Web Crypto for encryption. No backend, no telemetry, no cloud AI.
@@ -51,6 +51,10 @@ The manifest is a **development** manifest pointing to `https://localhost:3000` 
 - **Word on Mac** — copy `manifest.xml` to `~/Library/Containers/com.microsoft.Word/Data/Documents/wef/` (create `wef` if needed), restart Word, *Insert ▸ Add-ins ▸ My Add-ins ▸ Developer Add-ins*.
 - **Word on the web** — open a document, *Insert ▸ Add-ins ▸ More Add-ins ▸ Upload My Add-in*, choose `manifest.xml`.
 - Or: `npx office-addin-debugging start manifest.xml` (Microsoft tooling).
+
+**Installers:** `scripts/install.ps1` (Windows, PowerShell, no admin) / `scripts/install.sh` (macOS) fetch the latest release `manifest.prod.xml` and register it.
+
+**Hosted (GitHub Pages):** pushing a `v*` tag deploys `dist/` to `https://<owner>.github.io/<repo>/` and attaches `manifest.prod.xml` (localhost URLs rewritten) to the GitHub release. Download it and sideload as above. One-time: repo *Settings ▸ Pages ▸ Source = GitHub Actions*.
 
 Microsoft's current instructions are authoritative: <https://learn.microsoft.com/office/dev/add-ins/testing/test-debug-office-add-ins>. For production the manifest URLs must point to a real HTTPS host serving `npm run build` output (`dist/`), and the manifest `Version` (1.0.0.0, required ≥ 1.0 by the validator) is independent of the product version (0.3).
 

@@ -5,9 +5,9 @@
   xsi:type="TaskPaneApp">
   <Id>8d6c43e7-79ad-4fb8-97c8-2a91b89f20d1</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>Legal Anonymiser</ProviderName>
+  <ProviderName>Anonymiseur juridique</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Legal Anonymiser"/>
+  <DisplayName DefaultValue="Anonymiseur juridique"/>
   <Description DefaultValue="Local-only pseudonymisation and redaction for legal Word documents (FR/EN). Heuristic detection; review required."/>
   <IconUrl DefaultValue="https://localhost:3000/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://localhost:3000/icon-64.png"/>
