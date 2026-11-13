@@ -8,8 +8,8 @@ export { nlpDetect } from "./nlp";
 
 /**
  * Detector registry. Built-ins are deterministic local rules (FR/EN).
- * An optional LOCAL NLP model can be plugged in with `registerDetector` (e.g. a bundled ONNX NER model
- * running in a Web Worker). No such model ships with MVP 0.3, and detectors must never make network calls.
+ * The optional self-hosted NER model lives in nlp.ts (opt-in via the scan options); further LOCAL detectors can be
+ * plugged in with `registerDetector`. Detectors must never make network calls.
  */
 const extra: Detector[] = [];
 export function registerDetector(d: Detector): void { extra.push(d); }

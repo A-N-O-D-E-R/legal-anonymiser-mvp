@@ -4,8 +4,8 @@ import { nlpDetect } from "../src/detection/nlp";
 import { buildDocx, para, run } from "./fixtures";
 
 // Fake NER: no model download. Returns word pieces the way transformers.js does (no offsets).
-const { pipeline } = vi.hoisted(() => ({ pipeline: vi.fn() }));
-vi.mock("@huggingface/transformers", () => ({ pipeline }));
+const { pipeline, env } = vi.hoisted(() => ({ pipeline: vi.fn(), env: { localModelPath: "", backends: { onnx: { wasm: { wasmPaths: { mjs: "https://cdn.example/ort.mjs", wasm: "https://cdn.example/ort.wasm" } } } } } as { allowRemoteModels?: boolean; localModelPath: string; backends: { onnx: { wasm: { wasmPaths: unknown } } } } }));
+vi.mock("@huggingface/transformers", () => ({ pipeline, env }));
 const tok = (entity: string, word: string, score = 0.99) => ({ entity, word, score });
 pipeline.mockImplementation(async () => async (text: string) => [
   ...(text.includes("Zoltan Quixley") ? [tok("B-PER", "Zol"), tok("I-PER", "##tan"), tok("I-PER", "Qui"), tok("I-PER", "##xley")] : []),
@@ -20,6 +20,15 @@ describe("NLP detection (mocked model)", () => {
   it("is not loaded unless requested", async () => {
     await scanDocx(await docx(), "redact");
     expect(pipeline).not.toHaveBeenCalled();
+  });
+
+  it("loads model and WASM runtime from our own origin only", async () => {
+    await nlpDetect("x");
+    expect(env.allowRemoteModels).toBe(false);
+    expect(env.localModelPath).toMatch(/\/models\/$/);
+    expect(env.localModelPath.startsWith(document.baseURI.replace(/[^/]*$/, ""))).toBe(true);
+    expect(env.backends.onnx.wasm.wasmPaths).toEqual({ mjs: expect.stringContaining("/vendor/ort/ort.mjs"), wasm: expect.stringContaining("/vendor/ort/ort.wasm") });
+    expect(JSON.stringify(env)).not.toContain("cdn.example");
   });
 
   it("merges word pieces, maps labels, drops low scores", async () => {

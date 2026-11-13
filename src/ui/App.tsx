@@ -3,7 +3,7 @@ import { buildPlan, entityCount, manualEntity } from "../core/plan";
 import { ENTITY_KINDS, ProcessingBlocked, type Entity, type EntityKind, type Issue, type Mode } from "../core/types";
 import { countOccurrences, processDocx, restoreDocx, scanDocx } from "../document/pipeline";
 import { DOCX_MIME, LAMAP_MIME, downloadBytes, getCurrentDocumentBytes, inWord, openAsNewWordDocument } from "../office/wordFile";
-import { MIN_PASSWORD, MappingError, decryptMapping, encryptMapping, mappingFileName, newCaseId } from "../security/mappingCrypto";
+import { MAX_LABEL, MAX_MAPPING_BYTES, MIN_PASSWORD, MappingError, decryptMapping, encryptMapping, mappingFileName, newCaseId } from "../security/mappingCrypto";
 import { assessPassword } from "../security/password";
 import { LangContext, initialLang, makeT, type Lang } from "./i18n";
 import { EntityTable, IssueList, PasswordFields } from "./parts";
@@ -90,6 +90,7 @@ export default function App() {
     if (!mapFile) return;
     setBusy(true); setBlocked([]); setError(""); setResult(null);
     try {
+      if (mapFile.size > MAX_MAPPING_BYTES) throw new MappingError("TOO_LARGE"); // before reading it into memory
       const m = await decryptMapping(new Uint8Array(await mapFile.arrayBuffer()), pw);
       const out = await restoreDocx(await readDoc(), { caseId: m.caseId, entries: m.payload.entries });
       setPw("");
@@ -148,7 +149,7 @@ export default function App() {
           <h2 id="s3">{t("step3")}</h2>
           {mode === "pseudonymise" && <>
             <label htmlFor="cl">{t("caseLabel")}</label>
-            <input id="cl" value={caseLabel} onChange={e => setCaseLabel(e.target.value)} autoComplete="off" />
+            <input id="cl" maxLength={MAX_LABEL} value={caseLabel} onChange={e => setCaseLabel(e.target.value)} autoComplete="off" />
             <PasswordFields pw={pw} pw2={pw2} setPw={setPw} setPw2={setPw2} confirm />
           </>}
           {needsAck && <label className="inline"><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} /> {t("ackWarnings")}</label>}

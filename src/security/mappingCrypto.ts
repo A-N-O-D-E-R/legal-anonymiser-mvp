@@ -10,13 +10,18 @@ export const FORMAT = "legal-anonymiser-mapping";
 export const VERSION = 2;
 export const DEFAULT_ITERATIONS = 600_000;
 export const MIN_ITERATIONS = 100_000;
-export const MAX_ITERATIONS = 10_000_000;
+export const MAX_ITERATIONS = 2_000_000; // a hostile file must not be able to pin the CPU for minutes
+export const MAX_MAPPING_BYTES = 16 * 1024 * 1024; // whole .lamap file, checked before any read/parse
+export const MAX_PLAINTEXT_BYTES = 8 * 1024 * 1024; // decrypted payload JSON
+export const MAX_ENTRIES = 50_000;
+export const MAX_ORIGINAL = 2000;
+export const MAX_LABEL = 200;
 export const MIN_PASSWORD = 12;
 
 export interface MappingPayload { caseLabel: string; entries: MappingEntry[] }
 export interface MappingFile { caseId: string; createdAt: string; iterations: number; payload: MappingPayload }
 
-export type MappingErrorCode = "INVALID_FILE" | "UNSUPPORTED_VERSION" | "AUTH_FAILED" | "INVALID_PAYLOAD" | "WEAK_PASSWORD";
+export type MappingErrorCode = "INVALID_FILE" | "UNSUPPORTED_VERSION" | "AUTH_FAILED" | "INVALID_PAYLOAD" | "WEAK_PASSWORD" | "TOO_LARGE";
 export class MappingError extends Error {
   constructor(public code: MappingErrorCode) { super(code); }
 }
@@ -53,10 +58,10 @@ const aad = (h: Header): Uint8Array<ArrayBuffer> => new Uint8Array(enc.encode(JS
 
 export function validatePayload(p: unknown): MappingPayload {
   const o = p as Partial<MappingPayload> | null;
-  if (!o || typeof o.caseLabel !== "string" || !Array.isArray(o.entries) || o.entries.length > 200_000) throw new MappingError("INVALID_PAYLOAD");
+  if (!o || typeof o.caseLabel !== "string" || !Array.isArray(o.entries) || o.caseLabel.length > MAX_LABEL || o.entries.length > MAX_ENTRIES) throw new MappingError("INVALID_PAYLOAD");
   const tokens = new Set<string>();
   for (const e of o.entries) {
-    if (!e || typeof e.token !== "string" || typeof e.original !== "string" || !e.original || e.original.length > 2000 ||
+    if (!e || typeof e.token !== "string" || typeof e.original !== "string" || !e.original || e.original.length > MAX_ORIGINAL ||
         !(ENTITY_KINDS as readonly string[]).includes(e.kind) || !TOKEN_SHAPE_STRICT.test(e.token) || tokens.has(e.token)) throw new MappingError("INVALID_PAYLOAD");
     tokens.add(e.token);
   }
@@ -71,6 +76,8 @@ export async function encryptMapping(
   const iterations = opts.iterations ?? DEFAULT_ITERATIONS;
   if (!Number.isInteger(iterations) || iterations < MIN_ITERATIONS || iterations > MAX_ITERATIONS) throw new Error("iterations out of range");
   validatePayload(payload);
+  const body = enc.encode(JSON.stringify(payload));
+  if (body.length > MAX_PLAINTEXT_BYTES) throw new MappingError("TOO_LARGE");
   const salt = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(16)));
   const iv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(12)));
   const header: Header = {
@@ -78,11 +85,12 @@ export async function encryptMapping(
     kdf: "PBKDF2-HMAC-SHA-256", iterations, salt: toB64(salt), cipher: "AES-256-GCM", iv: toB64(iv)
   };
   const key = await deriveKey(password, salt, iterations);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad(header) }, key, enc.encode(JSON.stringify(payload))));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad(header) }, key, body));
   return enc.encode(JSON.stringify({ ...header, ciphertext: toB64(ct) }, null, 2));
 }
 
 export async function decryptMapping(file: Uint8Array, password: string): Promise<MappingFile> {
+  if (file.length > MAX_MAPPING_BYTES) throw new MappingError("TOO_LARGE");
   let h: Header & { ciphertext: string };
   try { h = JSON.parse(dec.decode(file)); } catch { throw new MappingError("INVALID_FILE"); }
   if (!h || typeof h !== "object" || h.format !== FORMAT) throw new MappingError("INVALID_FILE");
@@ -92,6 +100,7 @@ export async function decryptMapping(file: Uint8Array, password: string): Promis
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(h.caseId) || Number.isNaN(Date.parse(h.createdAt))) throw new MappingError("INVALID_FILE");
   const salt = fromB64(h.salt), iv = fromB64(h.iv), ct = fromB64(h.ciphertext);
   if (salt.length !== 16 || iv.length !== 12 || ct.length < 16) throw new MappingError("INVALID_FILE");
+  if (ct.length > MAX_PLAINTEXT_BYTES + 16) throw new MappingError("TOO_LARGE"); // before the expensive KDF
   const key = await deriveKey(password, salt, h.iterations);
   let plain: ArrayBuffer;
   try { plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: aad(h) }, key, ct); }

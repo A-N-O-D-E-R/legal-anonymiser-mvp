@@ -28,6 +28,18 @@ jobs:
       - uses: actions/deploy-pages@v4
         id: deploy
       - run: cd dist && zip -r ../legal-anonymiser-${{ github.ref_name }}.zip .
+      - name: Sign release manifest (SHA256SUMS)
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          test -n "$RELEASE_SIGNING_KEY" || { echo "secret RELEASE_SIGNING_KEY missing (see scripts/keygen.mjs)"; exit 1; }
+          sha256sum manifest.prod.xml legal-anonymiser-${{ github.ref_name }}.zip scripts/install.sh scripts/install.ps1 | sed 's| scripts/| |' > SHA256SUMS
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$RUNNER_TEMP/key.pem"
+          openssl dgst -sha256 -sign "$RUNNER_TEMP/key.pem" -out SHA256SUMS.sig SHA256SUMS
+          # the signature must verify against the key pinned in the installer, not just the secret we signed with
+          sed -n "/BEGIN PUBLIC KEY/,/END PUBLIC KEY/p" scripts/install.sh > "$RUNNER_TEMP/pub.pem"
+          openssl dgst -sha256 -verify "$RUNNER_TEMP/pub.pem" -signature SHA256SUMS.sig SHA256SUMS
+          rm -f "$RUNNER_TEMP/key.pem"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -52,3 +64,7 @@ jobs:
           files: |
             legal-anonymiser-${{ github.ref_name }}.zip
             manifest.prod.xml
+            SHA256SUMS
+            SHA256SUMS.sig
+            scripts/install.sh
+            scripts/install.ps1

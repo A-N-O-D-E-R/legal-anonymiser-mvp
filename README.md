@@ -31,15 +31,15 @@ UI languages: English and French (auto-selected from Office display language; sw
 
 ## Install & run (developer)
 
-Requirements: Node.js ≥ 20 (tested on 22), npm, Word (Windows / Mac / web) with Office Add-ins enabled.
+Requirements: Node.js ^22.12 or ^24 (vite 8 / vitest 5 engines; enforced via `engines`, tested on 22.23), npm, Word (Windows / Mac / web) with Office Add-ins enabled.
 
 ```bash
-npm install
+npm install                            # `npm run dev|build` first self-hosts the NLP model + ONNX runtime (see below; ~175 MB download, cached)
 npx office-addin-dev-certs install     # trusts a localhost HTTPS certificate (Office requires HTTPS)
 npm run dev                            # https://localhost:3000
 ```
 
-Other scripts: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run check` (all four), `npm run icons` (regenerate placeholder icons), `npm run package` (ZIP of the project).
+Other scripts: `npm run assets` (fetch + verify the self-hosted NLP model and WASM runtime; run automatically before `dev`/`build`), `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run check` (all four), `npm run icons` (regenerate placeholder icons), `npm run package` (ZIP of the project).
 
 Outside Word (plain browser) the task pane offers a `.docx` file picker so the pipeline can be exercised in development; "open in Word" is then unavailable (download only).
 
@@ -52,7 +52,7 @@ The manifest is a **development** manifest pointing to `https://localhost:3000` 
 - **Word on the web** — open a document, *Insert ▸ Add-ins ▸ More Add-ins ▸ Upload My Add-in*, choose `manifest.xml`.
 - Or: `npx office-addin-debugging start manifest.xml` (Microsoft tooling).
 
-**Installers:** `scripts/install.ps1` (Windows, PowerShell, no admin) / `scripts/install.sh` (macOS) fetch the latest release `manifest.prod.xml` and register it.
+**Installers:** `scripts/install.ps1` (Windows, PowerShell, no admin) / `scripts/install.sh` (macOS) fetch a release's `manifest.prod.xml` and register it **only after verification**: the signature on `SHA256SUMS` (RSA-3072 / SHA-256, public key pinned inside the installer) must be valid and the manifest's SHA-256 must match the signed list; otherwise they abort and install nothing. Pass a tag (`sh install.sh v0.3.0` / `.\install.ps1 -Tag v0.3.0`) to pin a version instead of `latest`. Each release also publishes `SHA256SUMS` + `SHA256SUMS.sig` covering the manifest, the `dist` ZIP and both installers, so you can check any asset by hand: `openssl dgst -sha256 -verify key.pem -signature SHA256SUMS.sig SHA256SUMS && sha256sum -c SHA256SUMS`. Trust root = the installer script you run (fetch it from a pinned tag/commit or a signed release asset, not from a branch you don't control). **Maintainer setup (once):** `node scripts/keygen.mjs key.pem` pins the public key in both installers (commit that), then store `key.pem` as the repo secret `RELEASE_SIGNING_KEY` and keep no other copy online; the release workflow fails without it. The signing and the Windows installer are untested end-to-end on real runners/Windows (the shell verification path was exercised locally).
 
 **Hosted (GitHub Pages):** pushing a `v*` tag deploys `dist/` to `https://<owner>.github.io/<repo>/` and attaches `manifest.prod.xml` (localhost URLs rewritten) to the GitHub release. Download it and sideload as above. One-time: repo *Settings ▸ Pages ▸ Source = GitHub Actions*.
 
@@ -62,11 +62,13 @@ Microsoft's current instructions are authoritative: <https://learn.microsoft.com
 
 ```
 src/core/        types, matcher (case/accent/apostrophe/hyphen-tolerant, boundary-aware), plan builder
-src/detection/   deterministic FR/EN detectors (rules, address, names), plug-in registry for an optional LOCAL NLP model
+src/detection/   deterministic FR/EN detectors (rules, address, names), nlp.ts (optional self-hosted NER model), plug-in registry for further LOCAL detectors
 src/document/    ooxml.ts   run-aware text units, tracked-change/comment/author/metadata sanitisers
                  package.ts classify every ZIP part, audit (block/warn), remove parts+rels+content types, integrity check
                  pipeline.ts scan → process (sanitise → replace → regenerate → re-open & verify) → restore
-src/security/    mappingCrypto.ts (.lamap v2), password.ts (strength guidance)
+src/security/    mappingCrypto.ts (.lamap v2 + size/resource limits), password.ts (strength guidance)
+scripts/         prepare-assets.mjs (pinned model + WASM), keygen.mjs, install.sh/.ps1 (verifying installers)
+models.lock.json pinned Hugging Face revision + SHA-256 of every model file
 src/office/      Office.js integration (read file, open new document)
 src/ui/          React UI + FR/EN dictionary
 tests/           vitest; documents are built in memory (tests/fixtures.ts)
@@ -79,13 +81,13 @@ Safety gates (processing stops with an explicit message instead of producing a d
 ## Implemented vs experimental
 
 **Implemented and covered by automated tests (synthetic documents only):**
-run-preserving replacement (split runs, bold/italic/colour/font kept, tables incl. nested, headers/footers, footnotes, hyperlinks, bookmarks, text boxes incl. `mc:Fallback`, section properties); consistent pseudonyms, case variants with exact restoration (`_V2` variants); partial-word protection; accents/hyphens/apostrophes/NFD; AES-256-GCM `.lamap` v2 with authenticated header, PBKDF2-HMAC-SHA-256 (600 000 iterations default, configurable 100 000–10 000 000), fresh salt+IV; restoration with case-marker and unknown-token checks; redaction with tracked-change acceptance, comment/people/custom-XML/thumbnail/printer/web-extension removal, metadata wipe, author neutralisation; leak verification of the output package (parts, names, text, attributes, relationships); integrity check; FR/EN detection rules (email, FR/UK/US phones, IBAN mod-97, SIREN/SIRET Luhn, VAT, UK company no., EIN/SSN/NIR, birth dates, case references, FR/UK/US addresses, persons, companies); UI smoke test; FR/EN UI.
+run-preserving replacement (split runs, bold/italic/colour/font kept, tables incl. nested, headers/footers, footnotes, hyperlinks, bookmarks, text boxes incl. `mc:Fallback`, section properties); consistent pseudonyms, case variants with exact restoration (`_V2` variants); partial-word protection; accents/hyphens/apostrophes/NFD; AES-256-GCM `.lamap` v2 with authenticated header, PBKDF2-HMAC-SHA-256 (600 000 iterations default, configurable 100 000–2 000 000), fresh salt+IV, size/resource limits (file ≤ 16 MiB, payload ≤ 8 MiB, ≤ 50 000 entries, original ≤ 2000 chars, case label ≤ 200 chars; checked before KDF/decryption); restoration with case-marker and unknown-token checks; redaction with tracked-change acceptance, comment/people/custom-XML/thumbnail/printer/web-extension removal, metadata wipe, author neutralisation; leak verification of the output package (parts, names, text, attributes, relationships); integrity check; FR/EN detection rules (email, FR/UK/US phones, IBAN mod-97, SIREN/SIRET Luhn, VAT, UK company no., EIN/SSN/NIR, birth dates, case references, FR/UK/US addresses, persons, companies); UI smoke test; FR/EN UI.
 
 **Implemented but NOT covered by an automated test:** replacement inside field codes (`w:instrText`/`w:fldSimple`), WordArt text, chart caches (`c:v`), SmartArt/diagram text, `a:p` DrawingML paragraphs, content-control labels, glossary documents, endnotes. They use the same engine and are still subject to the output verification gate.
 
-**Experimental / heuristic:** person and company detection (title/first-name-list/legal-form rules, small bundled first-name lists), address patterns, birth-date context rule, case-reference patterns, password-strength estimate, plug-in point for a local NLP model (**no model is shipped**).
+**Experimental / heuristic:** person and company detection (title/first-name-list/legal-form rules, small bundled first-name lists), address patterns, birth-date context rule, case-reference patterns, password-strength estimate, optional NER model (checkbox, off by default; **tested with a mock model in CI**, plus a one-off local smoke run of the real model).
 
-**Not implemented:** OCR / analysis of images; sanitising embedded objects, charts with embedded workbooks, ActiveX, alt-chunks (these are *blocked*, not cleaned); `.doc`/`.rtf`/PDF; local NER model; merging aliases (e.g. "Jean Dupont" ↔ "M. Dupont" are separate identities unless you add both); secure deletion; mapping backup/recovery; password recovery.
+**Not implemented:** OCR / analysis of images; sanitising embedded objects, charts with embedded workbooks, ActiveX, alt-chunks (these are *blocked*, not cleaned); `.doc`/`.rtf`/PDF; merging aliases (e.g. "Jean Dupont" ↔ "M. Dupont" are separate identities unless you add both); secure deletion; mapping backup/recovery; password recovery.
 
 ## Known limitations
 
@@ -101,6 +103,7 @@ run-preserving replacement (split runs, bold/italic/colour/font kept, tables inc
 - `.lamap` v1 files from MVP 0.2 are not readable (format changed to v2 with authenticated header).
 - `docProps` wipe removes author/company/title/etc. for all outputs.
 - Dev-tool dependency advisories remain (see SECURITY.md).
+- **NLP model is self-hosted, so `dist/` is ~240 MB** (model 170 MB + two copies of the ONNX WASM). GitHub Pages / nginx must serve `.onnx`/`.wasm`; whether Pages accepts the 170 MB file in an Actions artifact deploy has not been verified.
 
 ## Test and build results (this delivery)
 
@@ -110,8 +113,8 @@ Run on Linux (WSL2), Node 22.23.1, npm 10.9.8:
 |---|---|---|
 | TypeScript | `npm run typecheck` (`tsc -b`, strict + noUnusedLocals) | 0 errors |
 | Lint | `npm run lint` (eslint 9, typescript-eslint, react-hooks) | 0 issues |
-| Tests | `npm test` (vitest 5, jsdom) | 6 files, **57 tests passed**, 0 failed |
-| Production build | `npm run build` | success — `dist/assets/index-*.js` ≈ 303 kB (98 kB gzip) |
-| Manifest | `office-addin-manifest validate manifest.xml` | "The manifest is valid" (online validator; supports Word on Windows/Mac/web) |
+| Tests | `npm test` (vitest 5, jsdom) | 7 files, **68 tests passed**, 0 failed |
+| Production build | `npm run build` | success — `dist/assets/index-*.js` ≈ 309 kB (101 kB gzip), plus self-hosted model/WASM under `dist/models` and `dist/vendor` |
+| Manifest | `office-addin-manifest validate manifest.xml` | "The manifest is valid" at 0.3 delivery; not re-run for the later changes (manifest unchanged) |
 
 What the tests do **not** show: behaviour in real Word, Office.js file APIs (`getFileAsync`, `createDocument`), real browsers' `XMLSerializer`, accessibility with assistive technology, or large real-world documents.

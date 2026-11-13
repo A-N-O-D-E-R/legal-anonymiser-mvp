@@ -1,7 +1,8 @@
 import type { Detection, EntityKind } from "../core/types";
 
-// Multilingual (incl. FR) NER. Weights are downloaded once from Hugging Face and cached by the browser;
-// document text itself never leaves the page.
+// Multilingual (incl. FR) NER. Model and ONNX runtime are SELF-HOSTED next to the add-in (public/models, public/vendor/ort,
+// filled by scripts/prepare-assets.mjs from the revision + SHA-256 pinned in models.lock.json). Remote model loading is
+// disabled, so nothing is fetched from Hugging Face or a CDN at runtime and document text never leaves the page.
 const MODEL = "Xenova/bert-base-multilingual-cased-ner-hrl";
 const KIND: Record<string, [EntityKind, Detection["confidence"]]> = { PER: ["PERSON", "medium"], ORG: ["COMPANY", "medium"], LOC: ["ADDRESS", "low"] };
 const CHUNK = 1200;
@@ -11,12 +12,20 @@ type Ner = (t: string) => Promise<Tok[]>;
 let ner: Promise<Ner> | null = null;
 
 function load(onProgress?: (pct: number) => void): Promise<Ner> {
-  return ner ??= import("@huggingface/transformers").then(({ pipeline }) =>
-    pipeline("token-classification", MODEL, {
+  return ner ??= import("@huggingface/transformers").then(({ pipeline, env }) => {
+    const base = new URL("./", document.baseURI).href;
+    env.allowRemoteModels = false;
+    env.allowLocalModels = true;
+    env.localModelPath = `${base}models/`;
+    // The library defaults to a jsDelivr URL for the WASM runtime; keep its file choice but serve it from our origin.
+    const wasm = env.backends?.onnx?.wasm;
+    const orig = wasm?.wasmPaths as { mjs: string; wasm: string } | undefined;
+    if (wasm && orig) wasm.wasmPaths = { mjs: `${base}vendor/ort/${orig.mjs.split("/").pop()}`, wasm: `${base}vendor/ort/${orig.wasm.split("/").pop()}` };
+    return pipeline("token-classification", MODEL, {
       dtype: "q8",
       progress_callback: (p) => { if ("progress" in p && p.progress != null) onProgress?.(Math.round(p.progress)); }
-    }) as unknown as Promise<Ner>
-  ).catch(e => { ner = null; throw e; });
+    }) as unknown as Promise<Ner>;
+  }).catch(e => { ner = null; throw e; });
 }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
