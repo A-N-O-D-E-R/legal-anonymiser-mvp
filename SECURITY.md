@@ -4,7 +4,8 @@ Status: **prototype, no independent security or legal review.** Do not describe 
 
 ## Local-only processing
 - All parsing, detection, replacement, sanitisation, encryption and decryption run in the task-pane JavaScript. There is no backend, no remote AI/NLP call, no analytics or telemetry; no code path sends document text anywhere.
-- The only network resource is Microsoft's `office.js` (loaded from `appsforoffice.microsoft.com`, required by Office) and, in development, the Vite dev server.
+- **Optional NLP detection** (checkbox, off by default): runs a multilingual NER model (`Xenova/bert-base-multilingual-cased-ner-hrl`, ONNX/WASM via `@huggingface/transformers`) inside the task pane. Inference is local; document text is never sent. **Only the model weights** (~170 MB) are fetched, once, from Hugging Face (`huggingface.co` and its CDN) and then cached by the browser. The ONNX runtime WASM is bundled in `dist/`. With the checkbox off, the model code is never loaded and no such request is made. Consequences: (1) this is a network request that reveals to Hugging Face that the add-in was used (IP, user agent); (2) the model is a third-party artefact that is not pinned by hash: for high-assurance use, self-host a pinned copy and set `connect-src 'self'`; (3) NER output is probabilistic and offsets are recovered by text search, so it can miss or mislabel entities. Treat it as a suggestion to review, never a guarantee (low-confidence places are not pre-selected). Covered by tests with a mocked model only; the real model is not exercised in CI.
+- The only other network resource is Microsoft's `office.js` (loaded from `appsforoffice.microsoft.com`, required by Office) and, in development, the Vite dev server.
 - Not enforced in code (recommended hardening, untested in Word): serve production builds with a strict CSP (`connect-src 'self'`).
 - Detector plug-ins registered through `registerDetector` run in-process and must not make network calls (not technically enforced).
 
@@ -36,7 +37,7 @@ Fail closed: unknown parts, embedded OLE/workbooks/ActiveX/VBA, alt-chunks and n
 - Zip-bomb guard: ≤150 MB input, ≤5000 parts, ≤1 GiB declared uncompressed size.
 
 ## Dependencies
-Runtime: `jszip` 3.10.2, `react` / `react-dom` 18.3.1 — `npm audit --omit=dev`: **0 vulnerabilities** at delivery. Web Crypto is used for all cryptography (no third-party crypto). Dev tooling: after upgrading vitest/vite/plugin-react to current releases the critical/high advisories were cleared; **7 moderate advisories remain in the `typescript-eslint`/`minimatch` lint chain** (dev-only, not shipped in `dist/`). Re-run `npm audit` and `npm outdated` regularly; pin and review before any release.
+Runtime: `jszip` 3.10.2, `react` / `react-dom` 18.3.1, `@huggingface/transformers` (lazy-loaded, only for the optional NLP checkbox; not re-audited) — `npm audit --omit=dev`: **0 vulnerabilities** at delivery. Web Crypto is used for all cryptography (no third-party crypto). Dev tooling: after upgrading vitest/vite/plugin-react to current releases the critical/high advisories were cleared; **7 moderate advisories remain in the `typescript-eslint`/`minimatch` lint chain** (dev-only, not shipped in `dist/`). Re-run `npm audit` and `npm outdated` regularly; pin and review before any release.
 
 ## Threat model (summary)
 In scope: accidental disclosure via missed OOXML parts, tampered/wrong mapping files, weak passwords, cross-case mis-restoration. Out of scope / not mitigated: malicious host/browser, compromised workstation or extensions, shoulder-surfing, side channels, offline brute force of weak passwords against a stolen `.lamap`, legal sufficiency of anonymisation.

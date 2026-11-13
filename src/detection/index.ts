@@ -4,6 +4,7 @@ import { addressDetectors } from "./address";
 import { nameDetectors } from "./names";
 
 export type { Detector };
+export { nlpDetect } from "./nlp";
 
 /**
  * Detector registry. Built-ins are deterministic local rules (FR/EN).

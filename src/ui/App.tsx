@@ -23,6 +23,7 @@ export default function App() {
   const [blocked, setBlocked] = useState<Issue[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [nlp, setNlp] = useState(false); const [dl, setDl] = useState<number | null>(null);
   const [showLow, setShowLow] = useState(false);
   const [manual, setManual] = useState({ text: "", kind: "PERSON" as EntityKind });
   const [manualErr, setManualErr] = useState("");
@@ -48,9 +49,9 @@ export default function App() {
     if (mode === "restore") return;
     setBusy(true); reset();
     try {
-      const r = await scanDocx(await readDoc(), mode);
+      const r = await scanDocx(await readDoc(), mode, { nlp, onProgress: setDl });
       texts.current = r.texts; setEntities(r.entities); setScanIssues(r.issues);
-    } catch (e) { fail(e); } finally { setBusy(false); }
+    } catch (e) { fail(e); } finally { setBusy(false); setDl(null); }
   }
 
   function addManual() {
@@ -118,6 +119,9 @@ export default function App() {
       {mode !== "restore" && <section aria-labelledby="s1">
         <h2 id="s1">{t("step1")}</h2>
         {!inWord() && <><p className="hint">{t("notInWord")}</p><input type="file" accept=".docx" aria-label=".docx" onChange={async e => { const f = e.target.files?.[0]; if (f) devDoc.current = new Uint8Array(await f.arrayBuffer()); }} /></>}
+        <label><input type="checkbox" checked={nlp} onChange={e => setNlp(e.target.checked)} /> {t("nlp")}</label>
+        {nlp && <p className="hint">{t("nlpHint")}</p>}
+        {dl !== null && <p className="hint" role="status">{t("nlpLoading", { n: dl })}</p>}
         <button disabled={busy} onClick={analyse}>{busy && !entities ? t("analysing") : entities ? t("reanalyse") : t("analyse")}</button>
       </section>}
 

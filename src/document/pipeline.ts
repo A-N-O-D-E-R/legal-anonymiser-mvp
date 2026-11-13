@@ -1,6 +1,6 @@
 import type JSZip from "jszip";
 import { createFinder, createPseudonymizer, createRedactor, createRestorer, type Replacer, type Span } from "../core/matcher";
-import { detect } from "../detection";
+import { builtinDetectors, detect, nlpDetect } from "../detection";
 import { entitiesFromDetections } from "../core/plan";
 import { ProcessingBlocked, TOKEN_SHAPE, type Detection, type Entity, type Issue, type MappingEntry, type Mode, type Plan } from "../core/types";
 import {
@@ -49,7 +49,7 @@ const unitsFor = (name: string, doc: Document) => name.endsWith(".rels") ? relUn
 export interface ScanResult { entities: Entity[]; issues: Issue[]; texts: string[] }
 
 /** Detect candidate entities. Nothing is modified; `texts` stays in memory only so manual additions can be counted. */
-export async function scanDocx(bytes: Uint8Array, mode: Mode): Promise<ScanResult> {
+export async function scanDocx(bytes: Uint8Array, mode: Mode, opts: { nlp?: boolean; onProgress?: (pct: number) => void } = {}): Promise<ScanResult> {
   const { docs, issues } = await load(bytes, mode);
   const texts: string[] = [], dets: Detection[] = [];
   let hidden = false, tracked = false;
@@ -57,7 +57,10 @@ export async function scanDocx(bytes: Uint8Array, mode: Mode): Promise<ScanResul
     if (isRemoved(name, mode)) continue;
     hidden ||= hasHiddenText(doc); tracked ||= hasTrackedChanges(doc);
     if (mode === "redact") acceptTrackedChanges(doc);
-    for (const u of unitsFor(name, doc)) { texts.push(u.text); dets.push(...detect(u.text)); }
+    for (const u of unitsFor(name, doc)) { texts.push(u.text);
+      const nlp = opts.nlp ? await nlpDetect(u.text, opts.onProgress) : [];
+      dets.push(...detect(u.text, [...builtinDetectors(), { id: "nlp", run: () => nlp }]));
+    }
   }
   if (hidden) issues.push({ severity: "warn", code: "HIDDEN_TEXT" });
   if (tracked) issues.push({ severity: "warn", code: mode === "redact" ? "TRACKED_ACCEPTED" : "TRACKED_KEPT" });
